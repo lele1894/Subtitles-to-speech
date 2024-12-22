@@ -1,0 +1,4 @@
+edge-tts
+pydub
+pysubs2
+pygame 
