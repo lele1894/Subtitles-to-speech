@@ -27,6 +27,11 @@ jobs:
       uses: actions/setup-python@v4
       with:
         python-version: '3.10'
+        
+    - name: 设置中文编码
+      run: |
+        chcp 65001
+        echo "PYTHONIOENCODING=utf-8" >> $GITHUB_ENV
     
     - name: 安装依赖
       run: |
@@ -36,7 +41,7 @@ jobs:
     
     - name: 构建可执行文件
       run: |
-        pyinstaller --noconfirm pyinstaller.spec
+        pyinstaller --noconfirm --onefile --windowed --icon=app.ico --add-data "app.ico;." --name "字幕转语音工具" subtitle_to_speech.py
     
     - name: 获取版本号
       id: get_version
@@ -73,7 +78,7 @@ jobs:
           2. 确保系统已安装 FFmpeg（[下载地址](https://www.gyan.dev/ffmpeg/builds/)）
           3. 运行程序即可使用
           
-          ## 注意事项
+          ## ��意事项
           - 需要网络连接以使用语音服务
           - 转换大文件可能需要较长时间
           - 建议先试听语音效果再进行转换

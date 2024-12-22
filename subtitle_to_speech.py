@@ -22,6 +22,8 @@ def get_startupinfo():
         startupinfo = subprocess.STARTUPINFO()
         startupinfo.dwFlags |= subprocess.STARTF_USESHOWWINDOW
         startupinfo.wShowWindow = subprocess.SW_HIDE
+        # 添加创建新进程组的标志
+        startupinfo.dwFlags |= subprocess.CREATE_NEW_PROCESS_GROUP
         return startupinfo
     return None
 
@@ -38,7 +40,7 @@ class SubtitleToSpeech:
                 # 如果是打包后的exe
                 application_path = sys._MEIPASS
             else:
-                # 如果是直接运行的py文��
+                # 如果是直接运行的py文件
                 application_path = os.path.dirname(os.path.abspath(__file__))
             
             icon_path = os.path.join(application_path, 'app.ico')
@@ -192,7 +194,7 @@ class SubtitleToSpeech:
         voice_choices = self._get_voice_choices()
         for voice in voice_choices:
             self.voice_list.insert(tk.END, voice)
-        self.voice_list.selection_set(0)  # 默认选择第一个
+        self.voice_list.selection_set(0)  # 默认选���第一个
         
         # 试听按钮区域
         preview_frame = tk.Frame(voice_frame, bg=frame_bg)
@@ -312,7 +314,7 @@ class SubtitleToSpeech:
         right_frame = tk.Frame(panels_frame, bg=bg_color)
         right_frame.pack(side=tk.LEFT, fill=tk.BOTH, expand=True)  # expand=True 使其占用剩余空
         
-        # 日志显示区域
+        # 日志���示区域
         log_frame = tk.LabelFrame(
             right_frame,
             text=" 处理日志 ",
@@ -463,7 +465,7 @@ class SubtitleToSpeech:
                 rate = self.rate_var.get()
                 volume = self.volume_var.get()
                 
-                # 创建语音片段的临时目录
+                # 创建语音片��的临时目录
                 speech_temp_dir = os.path.join(main_temp_dir, "speech_segments")
                 os.makedirs(speech_temp_dir, exist_ok=True)
                 
@@ -844,11 +846,15 @@ def format_time_delta(start_time):
 def run_ffmpeg_command(command):
     """执行 FFmpeg 命令并隐藏窗口"""
     try:
+        # 添加 creationflags 参数
+        creation_flags = subprocess.CREATE_NO_WINDOW if platform.system() == 'Windows' else 0
+        
         process = subprocess.Popen(
             command,
             stdout=subprocess.PIPE,
             stderr=subprocess.PIPE,
-            startupinfo=get_startupinfo()
+            startupinfo=get_startupinfo(),
+            creationflags=creation_flags
         )
         stdout, stderr = process.communicate()
         
