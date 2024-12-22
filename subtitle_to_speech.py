@@ -16,6 +16,15 @@ from queue import Queue
 import gc
 import platform
 
+def get_startupinfo():
+    """获取适合当前操作系统的 startupinfo"""
+    if platform.system() == 'Windows':
+        startupinfo = subprocess.STARTUPINFO()
+        startupinfo.dwFlags |= subprocess.STARTF_USESHOWWINDOW
+        startupinfo.wShowWindow = subprocess.SW_HIDE
+        return startupinfo
+    return None
+
 class SubtitleToSpeech:
     def __init__(self):
         self.window = tk.Tk()
@@ -480,7 +489,7 @@ class SubtitleToSpeech:
                         continue
                         
                     try:
-                        # 生成语音文件
+                        # 生成语音���件
                         temp_file = os.path.join(speech_temp_dir, f"speech_{i+1}.mp3")
                         try:
                             await self.convert_text_to_speech(text, temp_file, voice, rate, volume)
@@ -556,7 +565,7 @@ class SubtitleToSpeech:
                     # 如果有背景音频，行混音
                     if audio_path and audio_path != "未选择文件":
                         mix_start = datetime.now()
-                        self.update_log("正在混合音频...")
+                        self.update_log("正��混合音频...")
                         
                         # 读取背景音频
                         background_audio = AudioSegment.from_file(
@@ -815,15 +824,6 @@ class SubtitleToSpeech:
         # 继续循环
         self.window.after(100, self._process_log_queue)
     
-    def get_startupinfo(self):
-        """获取适合当前操作系统的 startupinfo"""
-        if platform.system() == 'Windows':
-            startupinfo = subprocess.STARTUPINFO()
-            startupinfo.dwFlags |= subprocess.STARTF_USESHOWWINDOW
-            startupinfo.wShowWindow = subprocess.SW_HIDE
-            return startupinfo
-        return None
-
 def format_time_delta(start_time):
     """计算并格式化耗时"""
     delta = datetime.now() - start_time
