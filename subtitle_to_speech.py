@@ -477,14 +477,12 @@ class SubtitleToSpeech:
                 
                 # 加载字幕文件
                 convert_start = datetime.now()
-                try:
-                    subs = pysubs2.load(subtitle_path)
-                except Exception as e:
-                    self.show_message("错误", f"读取字幕文件失败: {str(e)}")
-                    return
-                
+                subs = pysubs2.load(subtitle_path)
                 total = len(subs)
                 self.update_log(f"开始转换 {total} 条字幕...")
+                
+                # 用于存储所有音频片段
+                audio_segments = []
                 
                 # 转换字幕
                 for i, line in enumerate(subs):
@@ -498,14 +496,53 @@ class SubtitleToSpeech:
                         temp_file = os.path.join(main_temp_dir, f"speech_{i+1}.mp3")
                         await self.convert_text_to_speech(text, temp_file, voice, rate, volume)
                         
+                        # 读取音频片段
+                        audio_segment = AudioSegment.from_mp3(temp_file)
+                        
+                        # 调整音频长度以匹配字幕持续时间
+                        subtitle_duration = line.end - line.start
+                        
+                        if len(audio_segment) > subtitle_duration:
+                            speed_factor = len(audio_segment) / subtitle_duration
+                            audio_segment = audio_segment.speedup(playback_speed=speed_factor)
+                        elif len(audio_segment) < subtitle_duration:
+                            silence_duration = subtitle_duration - len(audio_segment)
+                            audio_segment = audio_segment + AudioSegment.silent(duration=silence_duration)
+                        
+                        audio_segment = audio_segment[0:subtitle_duration]
+                        
+                        # 添加到音频片段列表
+                        audio_segments.append({
+                            'start': line.start,
+                            'audio': audio_segment,
+                            'text': text
+                        })
+                        
                         # 显示进度
                         self.update_log(f"✓ {current_progress}/{total}")
                         
                     except Exception as e:
                         self.update_log(f"⚠️ {current_progress}/{total} 失败: {str(e)}")
+                        # 添加空白音频代替失败的片段
+                        audio_segments.append({
+                            'start': line.start,
+                            'audio': AudioSegment.silent(duration=line.end - line.start),
+                            'text': text
+                        })
                         continue
                 
                 self.update_log(f"✓ 字幕转换完成 (耗时: {format_time_delta(convert_start)})")
+                
+                # 合并所有音频片段
+                final_duration = max(segment['start'] for segment in audio_segments) + 1000
+                dubbed_audio = AudioSegment.silent(duration=final_duration)
+                
+                for segment in audio_segments:
+                    dubbed_audio = dubbed_audio.overlay(
+                        segment['audio'],
+                        position=segment['start'],
+                        gain_during_overlay=-1
+                    )
                 
                 # 获取输出目录
                 input_name = os.path.splitext(subtitle_path)[0]
@@ -803,7 +840,7 @@ class SubtitleToSpeech:
             # 获取返回码
             rc = process.poll()
             if rc != 0:
-                raise Exception(f"FFmpeg 执行失败，返回码: {rc}")
+                raise Exception(f"FFmpeg 执行失败，���回码: {rc}")
             
             return None, None
         except Exception as e:
