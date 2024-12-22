@@ -88,8 +88,7 @@ class SubtitleToSpeech:
         self.window.after(100, self._process_log_queue)
         
         # 初始化事件循环
-        self.loop = asyncio.new_event_loop()
-        asyncio.set_event_loop(self.loop)
+        self.loop = None  # 不在主线程创建事件循环
     
     def get_voice_list(self):
         # 运行异步函数获取声音列表
@@ -125,7 +124,7 @@ class SubtitleToSpeech:
         left_frame.pack(side=tk.LEFT, fill=tk.BOTH, padx=(0, 10))
         left_frame.pack_propagate(False)  # 防止子控件影响Frame大小
         
-        # 文件选择区域
+        # 文件选择���域
         file_frame = tk.LabelFrame(
             left_frame,
             text=" 文件选择 ",
@@ -365,27 +364,22 @@ class SubtitleToSpeech:
         return voice_choices if voice_choices else ["未找到中文语音"]
     
     async def convert_text_to_speech(self, text, output_file, voice, rate, volume):
-        max_retries = 3  # 最大重试次数
-        retry_delay = 1  # 重试延迟（秒）
+        """转换文本为语音"""
+        max_retries = 3
+        retry_delay = 1
         
         for attempt in range(max_retries):
             try:
-                communicate = edge_tts.Communicate(
-                    text, 
-                    voice,
-                    rate=rate,
-                    volume=volume
-                )
+                communicate = edge_tts.Communicate(text, voice, rate=rate, volume=volume)
                 await communicate.save(output_file)
-                return  # 成功则直接返回
-                
+                return
             except Exception as e:
-                if attempt < max_retries - 1:  # 如果还有重试机会
+                if attempt < max_retries - 1:
                     self.update_log(f"⚠️ 语音生成失败，{retry_delay}秒后重试: {str(e)}")
                     await asyncio.sleep(retry_delay)
-                    retry_delay *= 2  # 增加重试延迟
-                else:  # 最后一次尝试失败
-                    raise  # 重新抛出异常
+                    retry_delay *= 2
+                else:
+                    raise
     
     def _start_conversion_thread(self):
         """新线程中启动转换过程"""
@@ -393,12 +387,15 @@ class SubtitleToSpeech:
         
         # 创建新的事件循环
         def run_conversion():
-            new_loop = asyncio.new_event_loop()
-            asyncio.set_event_loop(new_loop)
+            loop = asyncio.new_event_loop()
+            asyncio.set_event_loop(loop)
             try:
-                new_loop.run_until_complete(self.convert_subtitle())
+                loop.run_until_complete(self.convert_subtitle())
+            except Exception as e:
+                self.show_message("错误", f"转换失败: {str(e)}")
             finally:
-                new_loop.close()
+                loop.close()
+                asyncio.set_event_loop(None)  # 清除当前线程的事件循环
         
         # 创建并启动转换线程
         convert_thread = threading.Thread(
@@ -499,7 +496,7 @@ class SubtitleToSpeech:
                         # 读取音频片段
                         audio_segment = AudioSegment.from_mp3(temp_file)
                         
-                        # 调整音频长度以匹配字幕持续时间
+                        # 调整音频长度以匹配字幕持续���间
                         subtitle_duration = line.end - line.start
                         
                         if len(audio_segment) > subtitle_duration:
@@ -523,7 +520,7 @@ class SubtitleToSpeech:
                         
                     except Exception as e:
                         self.update_log(f"⚠️ {current_progress}/{total} 失败: {str(e)}")
-                        # 添加空白音频代替失败的片段
+                        # 添加空白音频代��失败的片段
                         audio_segments.append({
                             'start': line.start,
                             'audio': AudioSegment.silent(duration=line.end - line.start),
@@ -788,7 +785,7 @@ class SubtitleToSpeech:
             try:
                 while not self.log_queue.empty():
                     message = self.log_queue.get()
-                    # 如果进度信息，覆盖最后一行
+                    # 如果进度信息，覆盖���后一行
                     if message.startswith("✓ ") and "/" in message:
                         self.log_text.delete("end-2l", "end-1l")
                     self.log_text.insert(tk.END, message + "\n")
@@ -840,7 +837,7 @@ class SubtitleToSpeech:
             # 获取返回码
             rc = process.poll()
             if rc != 0:
-                raise Exception(f"FFmpeg 执行失败，���回码: {rc}")
+                raise Exception(f"FFmpeg 执行失败，回码: {rc}")
             
             return None, None
         except Exception as e:
@@ -852,8 +849,9 @@ class SubtitleToSpeech:
             # 清理临时文件
             self.cleanup_temp_files()
             # 关闭事件循环
-            if hasattr(self, 'loop') and self.loop and not self.loop.is_closed():
+            if self.loop and not self.loop.is_closed():
                 self.loop.close()
+                self.loop = None
         except Exception as e:
             print(f"清理资源时出错: {str(e)}")
     
