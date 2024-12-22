@@ -49,7 +49,7 @@ python subtitle_to_speech.py
 
 3. 高级功能
    - 试听：可以预览选择的语音效果
-   - 停止：随时停止语音预览
+   - 停止���随时停止语音预览
    - 实时日志：显示处理进度和状态
 
 4. 输出文件
@@ -82,3 +82,6 @@ MIT License
 - 支持基本的字幕转语音功能
 - 添加视频配音支持
 - 添加语音预览功能
+
+## 下载
+从 [Releases](https://github.com/yourusername/Subtitles-to-speech/releases) 页面下载最新版本。

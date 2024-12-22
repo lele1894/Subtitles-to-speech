@@ -11,6 +11,7 @@ import sys
 import subprocess
 from pygame import mixer
 import threading
+from datetime import datetime
 
 class SubtitleToSpeech:
     def __init__(self):
@@ -342,6 +343,8 @@ class SubtitleToSpeech:
         asyncio.run(self.convert_subtitle())
     
     async def convert_subtitle(self):
+        total_start_time = datetime.now()
+        
         subtitle_path = self.file_label.cget("text")
         media_path = self.media_label.cget("text")
         
@@ -364,6 +367,7 @@ class SubtitleToSpeech:
                 
                 # 如果选择了视频，提取音频
                 if is_video:
+                    extract_start = datetime.now()
                     self.update_log("正在提取视频音频...")
                     
                     # 在主临时目录中创建音频文件
@@ -393,6 +397,8 @@ class SubtitleToSpeech:
                         audio_path = temp_audio
                     else:
                         raise Exception(f"提取音频失败: {stderr.decode()}")
+                    
+                    self.update_log(f"✓ 音频提取完成 (耗时: {format_time_delta(extract_start)})")
                 else:
                     audio_path = media_path
                 
@@ -410,11 +416,15 @@ class SubtitleToSpeech:
                 speech_temp_dir = os.path.join(main_temp_dir, "speech_segments")
                 os.makedirs(speech_temp_dir, exist_ok=True)
                 
-                # 转换每一行字幕
+                # 转换字幕
+                convert_start = datetime.now()
                 total = len(subs)
+                self.update_log(f"开始转换 {total} 条字幕...")
+                
                 audio_segments = []
                 
                 for i, line in enumerate(subs):
+                    segment_start = datetime.now()
                     self.update_log(f"正在转换: {i+1}/{total}")
                     
                     text = line.text.strip()
@@ -458,6 +468,10 @@ class SubtitleToSpeech:
                     except Exception as e:
                         print(f"警告: 处理音频片段 {i+1} 时出错: {str(e)}")
                         continue
+                    
+                    self.update_log(f"✓ 片段 {i+1} 转换完成 (耗时: {format_time_delta(segment_start)})")
+                
+                self.update_log(f"✓ 字幕转换完成 (耗时: {format_time_delta(convert_start)})")
                 
                 try:
                     if not audio_segments:
@@ -482,6 +496,7 @@ class SubtitleToSpeech:
                     
                     # 如果有背景音频，行混音
                     if audio_path and audio_path != "未选择文件":
+                        mix_start = datetime.now()
                         self.update_log("正在混合音频...")
                         
                         # 读取背景音频
@@ -517,6 +532,7 @@ class SubtitleToSpeech:
                     
                     # 如果是视频文件，创建新的视频
                     if is_video:
+                        video_start = datetime.now()
                         self.update_log("正在生成最终视频...")
                         
                         # 使用原始文件名加上_s后缀
@@ -546,11 +562,15 @@ class SubtitleToSpeech:
                         if process.returncode != 0:
                             raise Exception(f"生成视频失败: {stderr.decode()}")
                     
-                    self.update_log("转换完成!")
+                    self.update_log(f"✓ 视频生成完成 (耗时: {format_time_delta(video_start)})")
+                    
+                    # 显示总耗时
+                    self.update_log(f"\n✨ 全部处理完成！总耗时: {format_time_delta(total_start_time)}")
+                    
                     if is_video:
-                        self.show_message("完成", f"视频转换完成!\n保存为: {output_video}")
+                        self.show_message("完成", f"视频转换完成!\n保存为: {output_video}\n总耗时: {format_time_delta(total_start_time)}")
                     else:
-                        self.show_message("完成", f"音频转换完成!\n保存为: {audio_output}")
+                        self.show_message("完成", f"音频转换完成!\n保存为: {audio_output}\n总耗时: {format_time_delta(total_start_time)}")
                     
                 except Exception as e:
                     self.show_message("错误", f"处理失败: {str(e)}")
@@ -625,7 +645,7 @@ class SubtitleToSpeech:
         voice_full = self.voice_list.get(selection[0])
         voice = voice_full.split()[0]
         
-        # 禁用试听按钮，启用停止按钮
+        # 禁用试听按钮，启用停��按钮
         self.preview_btn.config(state='disabled')
         self.stop_btn.config(state='normal')
         self.preview_btn.config(text="生成中...")
@@ -718,6 +738,19 @@ class SubtitleToSpeech:
         else:
             self.update_log(f"[{timestamp}] ℹ️ {message}")
         self.window.update()
+
+def format_time_delta(start_time):
+    """计算并格式化耗时"""
+    delta = datetime.now() - start_time
+    seconds = delta.total_seconds()
+    if seconds < 60:
+        return f"{seconds:.1f}秒"
+    elif seconds < 3600:
+        minutes = seconds / 60
+        return f"{minutes:.1f}分钟"
+    else:
+        hours = seconds / 3600
+        return f"{hours:.1f}小时"
 
 if __name__ == "__main__":
     app = SubtitleToSpeech()
