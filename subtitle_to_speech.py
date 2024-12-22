@@ -38,7 +38,7 @@ class SubtitleToSpeech:
                 # 如果是打包后的exe
                 application_path = sys._MEIPASS
             else:
-                # 如果是直接运行的py文件
+                # 如果是直接运行的py文��
                 application_path = os.path.dirname(os.path.abspath(__file__))
             
             icon_path = os.path.join(application_path, 'app.ico')
@@ -406,6 +406,7 @@ class SubtitleToSpeech:
         
         subtitle_path = self.file_label.cget("text")
         media_path = self.media_label.cget("text")
+        audio_path = None  # 初始化 audio_path
         
         if subtitle_path == "未选择文件":
             self.show_message("错误", "请先选择字幕文件!")
@@ -424,7 +425,7 @@ class SubtitleToSpeech:
                     self.show_message("错误", f"读取字幕文件失败: {str(e)}")
                     return
                 
-                # 果选择了视频，提取音频
+                # 如果选择了视频，提取音频
                 if is_video:
                     extract_start = datetime.now()
                     self.update_log("正在提取视频音频...")
@@ -444,10 +445,13 @@ class SubtitleToSpeech:
                     ]
                     
                     run_ffmpeg_command(command)
+                    audio_path = temp_audio  # 设置音频路径
                     
                     self.update_log(f"✓ 音频提取完成 (耗时: {format_time_delta(extract_start)})")
-                else:
+                elif media_path != "未选择文件":  # 如果选择了音频文件
                     audio_path = media_path
+                else:
+                    audio_path = None  # 如果没有选择任何媒体文件
                 
                 # 获选择的语音
                 voice_full = self.voice_list.get(self.voice_list.curselection())
@@ -489,7 +493,7 @@ class SubtitleToSpeech:
                         continue
                         
                     try:
-                        # 生成语音���件
+                        # 生成语音件
                         temp_file = os.path.join(speech_temp_dir, f"speech_{i+1}.mp3")
                         try:
                             await self.convert_text_to_speech(text, temp_file, voice, rate, volume)
@@ -565,7 +569,7 @@ class SubtitleToSpeech:
                     # 如果有背景音频，行混音
                     if audio_path and audio_path != "未选择文件":
                         mix_start = datetime.now()
-                        self.update_log("正��混合音频...")
+                        self.update_log("正在混合音频...")
                         
                         # 读取背景音频
                         background_audio = AudioSegment.from_file(
