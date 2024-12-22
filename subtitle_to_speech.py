@@ -25,7 +25,7 @@ def get_startupinfo():
     if platform.system() == 'Windows':
         startupinfo = subprocess.STARTUPINFO()
         startupinfo.dwFlags |= subprocess.STARTF_USESHOWWINDOW
-        startupinfo.wShowWindow = SW_MINIMIZE  # 使用自定义的常量
+        startupinfo.wShowWindow = subprocess.SW_HIDE
         return startupinfo
     return None
 
@@ -119,7 +119,7 @@ class SubtitleToSpeech:
         )
         file_frame.pack(fill=tk.X, pady=(0, 10), ipady=5)
         
-        # 视频/音频选择
+        # ���频/音频选择
         media_frame = tk.Frame(file_frame, bg=frame_bg)
         media_frame.pack(fill=tk.X, padx=10, pady=5)
         
@@ -274,7 +274,7 @@ class SubtitleToSpeech:
         )
         volume_frame.pack(fill=tk.X, pady=(0, 10), ipady=5)
         
-        # 背景���量
+        # 背景音量
         self.bg_volume_scale = tk.Scale(
             volume_frame,
             from_=0,
@@ -488,26 +488,34 @@ class SubtitleToSpeech:
                 for i, line in enumerate(subs):
                     segment_start = datetime.now()
                     
-                    # 只在开始时示一次
-                    if i == 0:
-                        self.update_log(f"正在转换: {i+1}/{total}")
-                    
                     text = line.text.strip()
                     if not text:
                         continue
                         
                     try:
-                        # 生成语音件
+                        # 生成语音文件
                         temp_file = os.path.join(speech_temp_dir, f"speech_{i+1}.mp3")
-                        try:
-                            await self.convert_text_to_speech(text, temp_file, voice, rate, volume)
-                        except Exception as e:
-                            self.update_log(f"警告: 段 {i+1} 转换失败，正在重试...")
-                            continue
+                        max_retries = 3  # 最大重试次数
+                        
+                        for retry in range(max_retries):
+                            try:
+                                await self.convert_text_to_speech(text, temp_file, voice, rate, volume)
+                                break  # 如果成功就跳出重试循环
+                            except Exception as e:
+                                if retry < max_retries - 1:
+                                    self.update_log(f"⚠️ 片段 {i+1} 转换失败，正在重试 ({retry + 1}/{max_retries}): {str(e)}")
+                                    await asyncio.sleep(1)  # 等待1秒后重试
+                                else:
+                                    raise  # 最后一次尝试失败时抛出异常
                         
                         # 等待文件生成完成
-                        while not os.path.exists(temp_file):
+                        retry_count = 0
+                        while not os.path.exists(temp_file) and retry_count < 10:
                             await asyncio.sleep(0.1)
+                            retry_count += 1
+                        
+                        if not os.path.exists(temp_file):
+                            raise Exception("语音文件生成失败")
                         
                         # 读取音频片段
                         audio_segment = AudioSegment.from_mp3(temp_file)
@@ -530,8 +538,17 @@ class SubtitleToSpeech:
                             'text': text
                         })
                         
+                        self.update_log(f"✓ 片段 {i+1} (耗时: {format_time_delta(segment_start)})")
+                        
                     except Exception as e:
                         self.update_log(f"⚠️ 片段 {i+1} 失败: {str(e)}")
+                        # 添加空白音频代替失败的片段
+                        audio_segments.append({
+                            'start': line.start,
+                            'audio': AudioSegment.silent(duration=line.end - line.start),
+                            'text': text
+                        })
+                        self.update_log(f"已添加空白音频替代失败的片段 {i+1}")
                         continue
                     
                     progress_count += 1
@@ -557,7 +574,7 @@ class SubtitleToSpeech:
                                       for segment in audio_segments) + 1000
                     dubbed_audio = AudioSegment.silent(duration=final_duration)
                     
-                    # 合并所有配��片段
+                    # 合并所有配音片段
                     for segment in audio_segments:
                         dubbed_audio = dubbed_audio.overlay(
                             segment['audio'], 
@@ -610,7 +627,7 @@ class SubtitleToSpeech:
                         parameters=["-q:a", "0", "-ar", "44100", "-b:a", "192k"]
                     )
                     
-                    # 如果���视频文件，创建新的视频
+                    # 如果视频文件，创建新的视频
                     if is_video:
                         video_start = datetime.now()
                         self.update_log("正在生成最终视频...")
@@ -734,7 +751,7 @@ class SubtitleToSpeech:
                 rate = self.rate_var.get()
                 volume = self.volume_var.get()
                 
-                # 生���语音
+                # 生成语音
                 asyncio.run(self.convert_text_to_speech(
                     "你好，我是你的语音模特。", 
                     preview_file,
@@ -799,7 +816,7 @@ class SubtitleToSpeech:
             print(f"清理临时文件失败: {str(e)}")
     
     def center_window(self, width, height):
-        """使窗口在屏幕居中"""
+        """使窗口在屏幕中"""
         # 获取屏幕宽度和高度
         screen_width = self.window.winfo_screenwidth()
         screen_height = self.window.winfo_screenheight()
@@ -841,27 +858,45 @@ class SubtitleToSpeech:
     def run_ffmpeg_command(self, command):
         """执行 FFmpeg 命令并将输出重定向到日志"""
         try:
+            # 在日志中显示正在执行的命令
+            command_str = ' '.join(command)
+            self.update_log(f"执行命令: {command_str}")
+            
+            # 使用 subprocess.PIPE 重定向输出
             process = subprocess.Popen(
                 command,
                 stdout=subprocess.PIPE,
                 stderr=subprocess.PIPE,
-                universal_newlines=True
+                universal_newlines=True,
+                startupinfo=get_startupinfo()  # 隐藏命令行窗口
             )
             
-            # 只显示关键进度信息
-            stdout, stderr = process.communicate()
-            progress_lines = [line for line in stderr.split('\n') if 
-                             any(x in line for x in ['frame=', 'size=', 'time=', 'speed='])]
+            # 使用一个变量来存储最后一次进度更新的时间
+            last_update = time.time()
+            update_interval = 0.5  # 每0.5秒更新一次
             
-            # 每秒更新一次进度
-            for line in progress_lines[-5:]:  # 只显示最后5行
-                self.update_log(f"[FFmpeg] {line.strip()}")
-                time.sleep(0.2)
+            # 读取输出直到进程结束
+            while True:
+                # 读取一行输出
+                line = process.stderr.readline()
+                
+                if not line and process.poll() is not None:
+                    break
+                    
+                # 只处理包含进度信息的行
+                if any(x in line for x in ['frame=', 'size=', 'time=', 'speed=']):
+                    current_time = time.time()
+                    # 检查是否需要更新
+                    if current_time - last_update >= update_interval:
+                        self.update_log(f"[FFmpeg] {line.strip()}")
+                        last_update = current_time
             
-            if process.returncode != 0:
-                raise Exception(f"FFmpeg 执行失败: {stderr}")
+            # 获取返回码
+            rc = process.poll()
+            if rc != 0:
+                raise Exception(f"FFmpeg 执行失败，返回码: {rc}")
             
-            return stdout, stderr
+            return None, None
         except Exception as e:
             raise Exception(f"FFmpeg 执行出错: {str(e)}")
     
