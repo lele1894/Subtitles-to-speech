@@ -14,6 +14,7 @@ import threading
 from datetime import datetime
 from queue import Queue
 import gc
+import platform
 
 class SubtitleToSpeech:
     def __init__(self):
@@ -23,9 +24,18 @@ class SubtitleToSpeech:
         
         # 设置图标
         try:
-            self.window.iconbitmap("app.ico")
-        except:
-            print("无法加载图标文件")
+            # 获取图标文件路径
+            if getattr(sys, 'frozen', False):
+                # 如果是打包后的exe
+                application_path = sys._MEIPASS
+            else:
+                # 如果是直接运行的py文件
+                application_path = os.path.dirname(os.path.abspath(__file__))
+            
+            icon_path = os.path.join(application_path, 'app.ico')
+            self.window.iconbitmap(icon_path)
+        except Exception as e:
+            print(f"无法加载图标文件: {str(e)}")
         
         # 设置窗口大小和位置
         self.window.geometry("850x850")
@@ -291,7 +301,7 @@ class SubtitleToSpeech:
         
         # 右侧面板 - 只包含日志显示
         right_frame = tk.Frame(panels_frame, bg=bg_color)
-        right_frame.pack(side=tk.LEFT, fill=tk.BOTH, expand=True)  # expand=True 使其占用剩余空间
+        right_frame.pack(side=tk.LEFT, fill=tk.BOTH, expand=True)  # expand=True 使其占用剩余空
         
         # 日志显示区域
         log_frame = tk.LabelFrame(
@@ -352,7 +362,7 @@ class SubtitleToSpeech:
                 
             except Exception as e:
                 if attempt < max_retries - 1:  # 如果还有重试机会
-                    print(f"语音生成失败{retry_delay}���后重试: {str(e)}")
+                    print(f"语音生成失败{retry_delay}秒后重试: {str(e)}")
                     await asyncio.sleep(retry_delay)
                     retry_delay *= 2  # 增加重试延迟
                 else:  # 最后一次尝试失败
@@ -424,19 +434,7 @@ class SubtitleToSpeech:
                         temp_audio
                     ]
                     
-                    process = subprocess.Popen(
-                        command,
-                        stdout=subprocess.PIPE,
-                        stderr=subprocess.PIPE
-                    )
-                    
-                    stdout, stderr = process.communicate()
-                    
-                    if process.returncode == 0:
-                        # 提取成功，更新音频路径
-                        audio_path = temp_audio
-                    else:
-                        raise Exception(f"提取���频失败: {stderr.decode()}")
+                    run_ffmpeg_command(command)
                     
                     self.update_log(f"✓ 音频提取完成 (耗时: {format_time_delta(extract_start)})")
                 else:
@@ -616,16 +614,7 @@ class SubtitleToSpeech:
                             output_video
                         ]
                         
-                        process = subprocess.Popen(
-                            command,
-                            stdout=subprocess.PIPE,
-                            stderr=subprocess.PIPE
-                        )
-                        
-                        stdout, stderr = process.communicate()
-                        
-                        if process.returncode != 0:
-                            raise Exception(f"生成视频失败: {stderr.decode()}")
+                        run_ffmpeg_command(command)
                     
                     self.update_log(f"✓ 视频生成完成 (耗时: {format_time_delta(video_start)})")
                     
@@ -825,6 +814,15 @@ class SubtitleToSpeech:
         
         # 继续循环
         self.window.after(100, self._process_log_queue)
+    
+    def get_startupinfo(self):
+        """获取适合当前操作系统的 startupinfo"""
+        if platform.system() == 'Windows':
+            startupinfo = subprocess.STARTUPINFO()
+            startupinfo.dwFlags |= subprocess.STARTF_USESHOWWINDOW
+            startupinfo.wShowWindow = subprocess.SW_HIDE
+            return startupinfo
+        return None
 
 def format_time_delta(start_time):
     """计算并格式化耗时"""
@@ -838,6 +836,24 @@ def format_time_delta(start_time):
     else:
         hours = seconds / 3600
         return f"{hours:.1f}小时"
+
+def run_ffmpeg_command(command):
+    """执行 FFmpeg 命令并隐藏窗口"""
+    try:
+        process = subprocess.Popen(
+            command,
+            stdout=subprocess.PIPE,
+            stderr=subprocess.PIPE,
+            startupinfo=get_startupinfo()
+        )
+        stdout, stderr = process.communicate()
+        
+        if process.returncode != 0:
+            raise Exception(f"FFmpeg 执行失败: {stderr.decode()}")
+        
+        return stdout, stderr
+    except Exception as e:
+        raise Exception(f"FFmpeg 执行出错: {str(e)}")
 
 if __name__ == "__main__":
     app = SubtitleToSpeech()

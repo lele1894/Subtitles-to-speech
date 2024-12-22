@@ -36,7 +36,7 @@ jobs:
     
     - name: 构建可执行文件
       run: |
-        pyinstaller --noconfirm --onefile --windowed --icon=app.ico --add-data "app.ico;." subtitle_to_speech.py
+        pyinstaller --noconfirm pyinstaller.spec
     
     - name: 获取版本号
       id: get_version
@@ -58,7 +58,7 @@ jobs:
         draft: false
         prerelease: ${{ github.event.inputs.prerelease || false }}
         files: |
-          ./dist/subtitle_to_speech.exe
+          ./dist/字幕转语音工具.exe
         body: |
           # 字幕转语音工具 ${{ env.VERSION }}
           
@@ -69,7 +69,7 @@ jobs:
           - 实时预览语音效果
           
           ## 安装说明
-          1. 下载 subtitle_to_speech.exe
+          1. 下载 字幕转语音工具.exe
           2. 确保系统已安装 FFmpeg（[下载地址](https://www.gyan.dev/ffmpeg/builds/)）
           3. 运行程序即可使用
           
