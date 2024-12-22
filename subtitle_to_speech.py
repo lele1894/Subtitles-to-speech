@@ -274,7 +274,7 @@ class SubtitleToSpeech:
         )
         volume_frame.pack(fill=tk.X, pady=(0, 10), ipady=5)
         
-        # 背景音量
+        # 背景���量
         self.bg_volume_scale = tk.Scale(
             volume_frame,
             from_=0,
@@ -316,7 +316,7 @@ class SubtitleToSpeech:
         right_frame = tk.Frame(panels_frame, bg=bg_color)
         right_frame.pack(side=tk.LEFT, fill=tk.BOTH, expand=True)  # expand=True 使其占用剩余空
         
-        # 日志显示区域
+        # 日志显示区
         log_frame = tk.LabelFrame(
             right_frame,
             text=" 处理日志 ",
@@ -448,14 +448,14 @@ class SubtitleToSpeech:
                         temp_audio
                     ]
                     
-                    run_ffmpeg_command(command)
+                    self.run_ffmpeg_command(command)
                     audio_path = temp_audio  # 设置音频路径
                     
                     self.update_log(f"✓ 音频提取完成 (耗时: {format_time_delta(extract_start)})")
                 elif media_path != "未选择文件":  # 如果选择了音频文件
                     audio_path = media_path
                 else:
-                    audio_path = None  # 如果没有选择任何媒体���件
+                    audio_path = None  # 如果没有选择任何媒体文件
                 
                 # 获选择的语音
                 voice_full = self.voice_list.get(self.voice_list.curselection())
@@ -488,7 +488,7 @@ class SubtitleToSpeech:
                 for i, line in enumerate(subs):
                     segment_start = datetime.now()
                     
-                    # 只在开始时��示一次
+                    # 只在开始时示一次
                     if i == 0:
                         self.update_log(f"正在转换: {i+1}/{total}")
                     
@@ -557,7 +557,7 @@ class SubtitleToSpeech:
                                       for segment in audio_segments) + 1000
                     dubbed_audio = AudioSegment.silent(duration=final_duration)
                     
-                    # 合并所有配音片段
+                    # 合并所有配��片段
                     for segment in audio_segments:
                         dubbed_audio = dubbed_audio.overlay(
                             segment['audio'], 
@@ -610,7 +610,7 @@ class SubtitleToSpeech:
                         parameters=["-q:a", "0", "-ar", "44100", "-b:a", "192k"]
                     )
                     
-                    # 如果是视频文件，创建新的视频
+                    # 如果���视频文件，创建新的视频
                     if is_video:
                         video_start = datetime.now()
                         self.update_log("正在生成最终视频...")
@@ -627,11 +627,11 @@ class SubtitleToSpeech:
                             '-strict', 'experimental',
                             '-map', '0:v:0',  # 使用第一个输入的视频流
                             '-map', '1:a:0',  # 使用第二个输入的音频流
-                            '-y',  # 覆盖已存在的文件
+                            '-y',  # 覆盖已存在的件
                             output_video
                         ]
                         
-                        run_ffmpeg_command(command)
+                        self.run_ffmpeg_command(command)
                     
                     self.update_log(f"✓ 视频生成完成 (耗时: {format_time_delta(video_start)})")
                     
@@ -695,7 +695,7 @@ class SubtitleToSpeech:
             mixer.music.play()
             self.is_playing = True
             
-            # 等待播放完成
+            # 等待播放完
             while mixer.music.get_busy():
                 time.sleep(0.1)
             
@@ -719,7 +719,7 @@ class SubtitleToSpeech:
         voice_full = self.voice_list.get(selection[0])
         voice = voice_full.split()[0]
         
-        # 禁试听按钮，启用停止按钮
+        # 禁试听按，启用停止按钮
         self.preview_btn.config(state='disabled')
         self.stop_btn.config(state='normal')
         self.preview_btn.config(text="生成中...")
@@ -734,7 +734,7 @@ class SubtitleToSpeech:
                 rate = self.rate_var.get()
                 volume = self.volume_var.get()
                 
-                # 生成语音
+                # 生���语音
                 asyncio.run(self.convert_text_to_speech(
                     "你好，我是你的语音模特。", 
                     preview_file,
@@ -772,6 +772,9 @@ class SubtitleToSpeech:
     
     def update_log(self, message):
         """将日志消息添加到队列"""
+        # 如果是 FFmpeg 输出，添加特殊前缀
+        if message.startswith("frame=") or message.startswith("size="):
+            message = f"[FFmpeg] {message}"
         self.log_queue.put(message)
     
     def run(self):
@@ -796,7 +799,7 @@ class SubtitleToSpeech:
             print(f"清理临时文件失败: {str(e)}")
     
     def center_window(self, width, height):
-        """使窗口在屏幕���居中"""
+        """使窗口在屏幕居中"""
         # 获取屏幕宽度和高度
         screen_width = self.window.winfo_screenwidth()
         screen_height = self.window.winfo_screenheight()
@@ -825,12 +828,42 @@ class SubtitleToSpeech:
             self.is_updating_log = True
             while not self.log_queue.empty():
                 message = self.log_queue.get()
+                # 如果是 FFmpeg 输出，覆盖最后一行
+                if message.startswith("[FFmpeg]"):
+                    self.log_text.delete("end-2l", "end-1l")
                 self.log_text.insert(tk.END, message + "\n")
                 self.log_text.see(tk.END)
             self.is_updating_log = False
         
         # 继续循环
         self.window.after(100, self._process_log_queue)
+    
+    def run_ffmpeg_command(self, command):
+        """执行 FFmpeg 命令并将输出重定向到日志"""
+        try:
+            process = subprocess.Popen(
+                command,
+                stdout=subprocess.PIPE,
+                stderr=subprocess.PIPE,
+                universal_newlines=True
+            )
+            
+            # 只显示关键进度信息
+            stdout, stderr = process.communicate()
+            progress_lines = [line for line in stderr.split('\n') if 
+                             any(x in line for x in ['frame=', 'size=', 'time=', 'speed='])]
+            
+            # 每秒更新一次进度
+            for line in progress_lines[-5:]:  # 只显示最后5行
+                self.update_log(f"[FFmpeg] {line.strip()}")
+                time.sleep(0.2)
+            
+            if process.returncode != 0:
+                raise Exception(f"FFmpeg 执行失败: {stderr}")
+            
+            return stdout, stderr
+        except Exception as e:
+            raise Exception(f"FFmpeg 执行出错: {str(e)}")
     
 def format_time_delta(start_time):
     """计算并格式化耗时"""
@@ -844,28 +877,6 @@ def format_time_delta(start_time):
     else:
         hours = seconds / 3600
         return f"{hours:.1f}小时"
-
-def run_ffmpeg_command(command):
-    """执行 FFmpeg 命令并最小化显示窗口"""
-    try:
-        # Windows 下不使用 CREATE_NO_WINDOW，而是最小化显示
-        creation_flags = 0
-        
-        process = subprocess.Popen(
-            command,
-            stdout=subprocess.PIPE,
-            stderr=subprocess.PIPE,
-            startupinfo=get_startupinfo(),
-            creationflags=creation_flags
-        )
-        stdout, stderr = process.communicate()
-        
-        if process.returncode != 0:
-            raise Exception(f"FFmpeg 执行失败: {stderr.decode()}")
-        
-        return stdout, stderr
-    except Exception as e:
-        raise Exception(f"FFmpeg 执行出错: {str(e)}")
 
 if __name__ == "__main__":
     app = SubtitleToSpeech()
