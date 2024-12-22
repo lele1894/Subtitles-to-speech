@@ -21,10 +21,10 @@ jobs:
     
     steps:
     - name: 检出代码
-      uses: actions/checkout@v2
+      uses: actions/checkout@v3
     
     - name: 设置 Python 环境
-      uses: actions/setup-python@v2
+      uses: actions/setup-python@v4
       with:
         python-version: '3.10'
     
@@ -40,26 +40,27 @@ jobs:
     
     - name: 获取版本号
       id: get_version
-      run: |
-        if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
-          echo "version=${{ github.event.inputs.version }}" >> $GITHUB_OUTPUT
-        else
-          echo "version=${GITHUB_REF#refs/tags/}" >> $GITHUB_OUTPUT
-        fi
       shell: bash
+      run: |
+        if [[ "${{ github.event_name }}" == "workflow_dispatch" ]]; then
+          echo "VERSION=${{ github.event.inputs.version }}" >> $GITHUB_ENV
+        else
+          echo "VERSION=${GITHUB_REF#refs/tags/}" >> $GITHUB_ENV
+        fi
     
     - name: 创建发布版本
-      id: create_release
-      uses: actions/create-release@v1
       env:
         GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      uses: softprops/action-gh-release@v1
       with:
-        tag_name: ${{ steps.get_version.outputs.version }}
-        release_name: 发布版本 ${{ steps.get_version.outputs.version }}
+        tag_name: ${{ env.VERSION }}
+        name: 发布版本 ${{ env.VERSION }}
         draft: false
         prerelease: ${{ github.event.inputs.prerelease || false }}
+        files: |
+          ./dist/subtitle_to_speech.exe
         body: |
-          # 字幕转语音工具 ${{ steps.get_version.outputs.version }}
+          # 字幕转语音工具 ${{ env.VERSION }}
           
           ## 更新内容
           - 支持 SRT 和 ASS 字幕文件转换为语音
@@ -82,13 +83,3 @@ jobs:
           - 系统环境
           - 具体错误信息
           - 重现步骤
-    
-    - name: 上传发布文件
-      uses: actions/upload-release-asset@v1
-      env:
-        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-      with:
-        upload_url: ${{ steps.create_release.outputs.upload_url }}
-        asset_path: ./dist/subtitle_to_speech.exe
-        asset_name: subtitle_to_speech.exe
-        asset_content_type: application/octet-stream
