@@ -26,7 +26,7 @@ exe = EXE(
     a.zipfiles,
     a.datas,
     [],
-    name='字幕转语音工具',
+    name='subtitle-to-speech',
     debug=False,
     bootloader_ignore_signals=False,
     strip=False,

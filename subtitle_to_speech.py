@@ -21,9 +21,7 @@ def get_startupinfo():
     if platform.system() == 'Windows':
         startupinfo = subprocess.STARTUPINFO()
         startupinfo.dwFlags |= subprocess.STARTF_USESHOWWINDOW
-        startupinfo.wShowWindow = subprocess.SW_HIDE
-        # 添加创建新进程组的标志
-        startupinfo.dwFlags |= subprocess.CREATE_NEW_PROCESS_GROUP
+        startupinfo.wShowWindow = subprocess.SW_MINIMIZE  # 最小化显示窗口
         return startupinfo
     return None
 
@@ -194,7 +192,7 @@ class SubtitleToSpeech:
         voice_choices = self._get_voice_choices()
         for voice in voice_choices:
             self.voice_list.insert(tk.END, voice)
-        self.voice_list.selection_set(0)  # 默认选���第一个
+        self.voice_list.selection_set(0)  # 默认选第一个
         
         # 试听按钮区域
         preview_frame = tk.Frame(voice_frame, bg=frame_bg)
@@ -314,7 +312,7 @@ class SubtitleToSpeech:
         right_frame = tk.Frame(panels_frame, bg=bg_color)
         right_frame.pack(side=tk.LEFT, fill=tk.BOTH, expand=True)  # expand=True 使其占用剩余空
         
-        # 日志���示区域
+        # 日志显示区域
         log_frame = tk.LabelFrame(
             right_frame,
             text=" 处理日志 ",
@@ -465,7 +463,7 @@ class SubtitleToSpeech:
                 rate = self.rate_var.get()
                 volume = self.volume_var.get()
                 
-                # 创建语音片��的临时目录
+                # 创建语音片段的临时目录
                 speech_temp_dir = os.path.join(main_temp_dir, "speech_segments")
                 os.makedirs(speech_temp_dir, exist_ok=True)
                 
@@ -652,7 +650,7 @@ class SubtitleToSpeech:
         # 完成后清理临时文件
         self.cleanup_temp_files()
         
-        # 在处理大量音频片段后主动进行垃圾回收
+        # 在处理大量音频片段后主动进行垃��回收
         gc.collect()
     
     def select_file(self):
@@ -811,7 +809,7 @@ class SubtitleToSpeech:
         timestamp = time.strftime("%H:%M:%S", time.localtime())
         if title == "错误":
             self.update_log(f"[{timestamp}] ❌ {message}")
-        elif title == "完成":
+        elif title == "完���":
             self.update_log(f"[{timestamp}] ✅ {message}")
         else:
             self.update_log(f"[{timestamp}] ℹ️ {message}")
@@ -844,10 +842,10 @@ def format_time_delta(start_time):
         return f"{hours:.1f}小时"
 
 def run_ffmpeg_command(command):
-    """执行 FFmpeg 命令并隐藏窗口"""
+    """执行 FFmpeg 命令并最小化显示窗口"""
     try:
-        # 添加 creationflags 参数
-        creation_flags = subprocess.CREATE_NO_WINDOW if platform.system() == 'Windows' else 0
+        # Windows 下不使用 CREATE_NO_WINDOW，而是最小化显示
+        creation_flags = 0
         
         process = subprocess.Popen(
             command,
