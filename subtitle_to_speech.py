@@ -16,6 +16,13 @@ from queue import Queue
 import gc
 import platform
 
+try:
+    import nest_asyncio
+    nest_asyncio.apply()  # 允许嵌套使用事件循环
+except ImportError:
+    print("警告: nest_asyncio 模块未安装，某些功能可能受限")
+    print("请运行: pip install nest-asyncio")
+
 # 添加 Windows API 常量
 SW_HIDE = 0
 SW_MINIMIZE = 6
@@ -74,6 +81,10 @@ class SubtitleToSpeech:
         
         # 启动日志更新循环
         self.window.after(100, self._process_log_queue)
+        
+        # 初始化事件环
+        self.loop = asyncio.new_event_loop()
+        asyncio.set_event_loop(self.loop)
     
     def get_voice_list(self):
         # 运行异步函数获取声音列表
@@ -119,7 +130,7 @@ class SubtitleToSpeech:
         )
         file_frame.pack(fill=tk.X, pady=(0, 10), ipady=5)
         
-        # ���频/音频选择
+        # 视频/音频选择
         media_frame = tk.Frame(file_frame, bg=frame_bg)
         media_frame.pack(fill=tk.X, padx=10, pady=5)
         
@@ -264,7 +275,7 @@ class SubtitleToSpeech:
         )
         self.volume_menu.pack(side=tk.LEFT, padx=5)
         
-        # 音量控制区域
+        # 音量控制域
         volume_frame = tk.LabelFrame(
             left_frame,  # 改为left_frame
             text=" 音频设置 ",
@@ -274,7 +285,7 @@ class SubtitleToSpeech:
         )
         volume_frame.pack(fill=tk.X, pady=(0, 10), ipady=5)
         
-        # 背景音量
+        # 背景音
         self.bg_volume_scale = tk.Scale(
             volume_frame,
             from_=0,
@@ -284,12 +295,12 @@ class SubtitleToSpeech:
             bg=frame_bg,
             highlightthickness=0
         )
-        self.bg_volume_scale.set(30)
+        self.bg_volume_scale.set(5)
         self.bg_volume_scale.pack(fill=tk.X, padx=10, pady=5)
         
         # 开始转换按钮
         self.convert_btn = tk.Button(
-            left_frame,  # 改为left_frame
+            left_frame,  # 为left_frame
             text="开始转换",
             command=self.start_conversion,
             width=20,
@@ -375,9 +386,9 @@ class SubtitleToSpeech:
                 
             except Exception as e:
                 if attempt < max_retries - 1:  # 如果还有重试机会
-                    print(f"语音生成失败{retry_delay}秒后重试: {str(e)}")
+                    self.update_log(f"⚠️ 语音生成失败，{retry_delay}秒后重试: {str(e)}")
                     await asyncio.sleep(retry_delay)
-                    retry_delay *= 2  # 增加重试延迟
+                    retry_delay *= 2  # 增加重��延迟
                 else:  # 最后一次尝试失败
                     raise  # 重新抛出异常
     
@@ -416,7 +427,7 @@ class SubtitleToSpeech:
             self.show_message("错误", "请先选择字幕文件!")
             return
         
-        # 检查是否选择了视频文件
+        # 检查是否选��了视频文件
         is_video = media_path.lower().endswith(('.mp4', '.mkv', '.avi', '.mov'))
         
         # 创建一个主临时目录
@@ -482,8 +493,7 @@ class SubtitleToSpeech:
                 self.progress_var.set(0)
                 
                 # 批量更新进度
-                progress_count = 0
-                update_interval = max(1, total // 20)  # 每5%更新一次
+                last_progress = 0  # 只保留上一次进度记录
                 
                 for i, line in enumerate(subs):
                     segment_start = datetime.now()
@@ -551,16 +561,15 @@ class SubtitleToSpeech:
                         self.update_log(f"已添加空白音频替代失败的片段 {i+1}")
                         continue
                     
-                    progress_count += 1
-                    if progress_count >= update_interval:
-                        self.update_log(f"已完成: {i+1}/{total}")
-                        progress_count = 0
-                    
-                    # 只显示完成时间，不重复显示正在转换
-                    self.update_log(f"✓ 片段 {i+1} (耗时: {format_time_delta(segment_start)})")
+                    # 更新进度
+                    current_progress = i + 1
+                    if current_progress > last_progress:  # 只在进度增加时更新
+                        # 只显示一次进度信息
+                        self.update_log(f"✓ {current_progress}/{total}")
+                        last_progress = current_progress
                     
                     # 更新进度条
-                    progress = (i + 1) / total * 100
+                    progress = current_progress / total * 100
                     self.progress_var.set(progress)
                 
                 self.update_log(f"✓ 字幕转换完成 (耗时: {format_time_delta(convert_start)})")
@@ -579,7 +588,7 @@ class SubtitleToSpeech:
                         dubbed_audio = dubbed_audio.overlay(
                             segment['audio'], 
                             position=segment['start'],
-                            gain_during_overlay=-1  # 轻微降低重叠部分的音量
+                            gain_during_overlay=-1  # 轻微降低重叠��分的音量
                         )
                     
                     # 创建输出目录
@@ -627,7 +636,7 @@ class SubtitleToSpeech:
                         parameters=["-q:a", "0", "-ar", "44100", "-b:a", "192k"]
                     )
                     
-                    # 如果视频文件，创建新的视频
+                    # 如果视频件，创建新的视频
                     if is_video:
                         video_start = datetime.now()
                         self.update_log("正在生成最终视频...")
@@ -638,7 +647,7 @@ class SubtitleToSpeech:
                         command = [
                             'ffmpeg',
                             '-i', media_path,  # 原视频
-                            '-i', audio_output,  # 混合后的音频
+                            '-i', audio_output,  # 合后的音频
                             '-c:v', 'copy',  # 复制视频流
                             '-c:a', 'aac',  # 音频编码
                             '-strict', 'experimental',
@@ -652,7 +661,7 @@ class SubtitleToSpeech:
                     
                     self.update_log(f"✓ 视频生成完成 (耗时: {format_time_delta(video_start)})")
                     
-                    # 显示总耗时
+                    # 显示总时
                     self.update_log(f"\n✨ 全部处理完成！总耗时: {format_time_delta(total_start_time)}")
                     
                     if is_video:
@@ -736,7 +745,7 @@ class SubtitleToSpeech:
         voice_full = self.voice_list.get(selection[0])
         voice = voice_full.split()[0]
         
-        # 禁试听按，启用停止按钮
+        # 禁试听按，启停止按钮
         self.preview_btn.config(state='disabled')
         self.stop_btn.config(state='normal')
         self.preview_btn.config(text="生成中...")
@@ -772,7 +781,7 @@ class SubtitleToSpeech:
                     import shutil
                     shutil.copy2(preview_file, temp_preview)
                     
-                    # 在新线程中播放音频
+                    # 在新线程中放音频
                     self.preview_btn.config(text="播放中...")
                     threading.Thread(
                         target=self.play_preview,
@@ -798,12 +807,7 @@ class SubtitleToSpeech:
         try:
             self.window.mainloop()
         finally:
-            # 清理资源
-            self.cleanup_temp_files()
-            # 确保所有线程都已终止
-            for thread in threading.enumerate():
-                if thread != threading.current_thread():
-                    thread.join(timeout=1.0)
+            self.cleanup()
     
     def cleanup_temp_files(self):
         """清理临时文件和文件夹"""
@@ -829,7 +833,7 @@ class SubtitleToSpeech:
         self.window.geometry(f"{width}x{height}+{x}+{y}")
     
     def show_message(self, title, message):
-        """显示消息到日志"""
+        """示消息到日志"""
         timestamp = time.strftime("%H:%M:%S", time.localtime())
         if title == "错误":
             self.update_log(f"[{timestamp}] ❌ {message}")
@@ -899,6 +903,17 @@ class SubtitleToSpeech:
             return None, None
         except Exception as e:
             raise Exception(f"FFmpeg 执行出错: {str(e)}")
+    
+    def cleanup(self):
+        """清理资源"""
+        try:
+            # 清理临时文件
+            self.cleanup_temp_files()
+            # 关闭事件循环
+            if self.loop and not self.loop.is_closed():
+                self.loop.close()
+        except Exception as e:
+            print(f"清理资���时出错: {str(e)}")
     
 def format_time_delta(start_time):
     """计算并格式化耗时"""
