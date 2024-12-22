@@ -43,7 +43,7 @@ class SubtitleToSpeech:
         self.window.withdraw()  # 先隐藏窗口
         
         # 设置字体和编码
-        self.window.option_add('*Font', 'Microsoft YaHei UI 9')
+        self.window.option_add('*Font', ('Microsoft YaHei UI', 9))
         if platform.system() == 'Windows':
             self.window.option_add('*encoding', 'utf-8')
         
@@ -87,7 +87,7 @@ class SubtitleToSpeech:
         # 启动日志更新循环
         self.window.after(100, self._process_log_queue)
         
-        # 初始化事件环
+        # 初始化事件循环
         self.loop = asyncio.new_event_loop()
         asyncio.set_event_loop(self.loop)
     
@@ -111,7 +111,7 @@ class SubtitleToSpeech:
         title_label = tk.Label(
             title_frame,
             text="字幕转语音工具",
-            font=("Microsoft YaHei UI", 16, "bold"),
+            font=('Microsoft YaHei UI', 16, 'bold'),
             bg=bg_color
         )
         title_label.pack()
@@ -183,7 +183,7 @@ class SubtitleToSpeech:
         voice_frame = tk.LabelFrame(
             left_frame,  # 改为left_frame
             text=" 语音设置 ",
-            font=("Microsoft YaHei UI", 9, "bold"),
+            font=('Microsoft YaHei UI', 9, 'bold'),
             bg=frame_bg,
             relief=tk.GROOVE
         )
@@ -314,7 +314,7 @@ class SubtitleToSpeech:
             cursor="hand2",
             bg="#4CAF50",
             fg="white",
-            font=("Microsoft YaHei UI", 9, "bold")
+            font=('Microsoft YaHei UI', 9, 'bold')
         )
         self.convert_btn.pack(pady=10)
         
@@ -388,12 +388,21 @@ class SubtitleToSpeech:
                     raise  # 重新抛出异常
     
     def _start_conversion_thread(self):
-        """在新线程中启动转换过程"""
+        """新线程中启动转换过程"""
         self.convert_btn.config(state='disabled')
+        
+        # 创建新的事件循环
+        def run_conversion():
+            new_loop = asyncio.new_event_loop()
+            asyncio.set_event_loop(new_loop)
+            try:
+                new_loop.run_until_complete(self.convert_subtitle())
+            finally:
+                new_loop.close()
         
         # 创建并启动转换线程
         convert_thread = threading.Thread(
-            target=lambda: asyncio.run(self.convert_subtitle()),
+            target=run_conversion,
             daemon=True
         )
         convert_thread.start()
@@ -422,18 +431,64 @@ class SubtitleToSpeech:
             self.show_message("错误", "请先选择字幕文件!")
             return
         
-        # 检查是否选择了视频文件
+        # 获取选择的语音
+        selection = self.voice_list.curselection()
+        if not selection:
+            self.show_message("错误", "请先选择语音!")
+            return
+        voice_full = self.voice_list.get(selection[0])
+        voice = voice_full.split()[0]
+        
+        # 获取语音参数
+        rate = self.rate_var.get()
+        volume = self.volume_var.get()
+        
+        # 检查是否选择视频文件
         is_video = media_path.lower().endswith(('.mp4', '.mkv', '.avi', '.mov'))
         
+        # 创建一个主临时目录
         with tempfile.TemporaryDirectory() as main_temp_dir:
             try:
+                # 如果选择了视频，提取音频
+                if is_video:
+                    extract_start = datetime.now()
+                    self.update_log("正在提取视频音频...")
+                    
+                    # 在主临时目录中创建音频文件
+                    temp_audio = os.path.join(main_temp_dir, "extracted_audio.mp3")
+                    
+                    # 使用ffmpeg提取音频
+                    command = [
+                        'ffmpeg',
+                        '-i', media_path,
+                        '-vn',  # 不处理视频
+                        '-acodec', 'libmp3lame',
+                        '-q:a', '0',  # 最高质量
+                        '-y',  # 覆盖已存在的文件
+                        temp_audio
+                    ]
+                    
+                    self.run_ffmpeg_command(command)
+                    audio_path = temp_audio
+                    
+                    self.update_log(f"✓ 音频提取完成 (耗时: {format_time_delta(extract_start)})")
+                elif media_path != "未选择文件":  # 如果选择了音频文件
+                    audio_path = media_path
+                
                 # 加载字幕文件
-                subs = pysubs2.load(subtitle_path)
+                convert_start = datetime.now()
+                try:
+                    subs = pysubs2.load(subtitle_path)
+                except Exception as e:
+                    self.show_message("错误", f"读取字幕文件失败: {str(e)}")
+                    return
+                
                 total = len(subs)
                 self.update_log(f"开始转换 {total} 条字幕...")
                 
                 # 转换字幕
                 for i, line in enumerate(subs):
+                    current_progress = i + 1
                     text = line.text.strip()
                     if not text:
                         continue
@@ -444,7 +499,6 @@ class SubtitleToSpeech:
                         await self.convert_text_to_speech(text, temp_file, voice, rate, volume)
                         
                         # 显示进度
-                        current_progress = i + 1
                         self.update_log(f"✓ {current_progress}/{total}")
                         
                     except Exception as e:
@@ -453,7 +507,71 @@ class SubtitleToSpeech:
                 
                 self.update_log(f"✓ 字幕转换完成 (耗时: {format_time_delta(convert_start)})")
                 
-                # ... 其他代码保持不变 ...
+                # 获取输出目录
+                input_name = os.path.splitext(subtitle_path)[0]
+                output_dir = os.path.dirname(subtitle_path)
+                
+                # 创建输出目录（如果不存在）
+                if not os.path.exists(output_dir):
+                    os.makedirs(output_dir)
+                
+                # 如果有背景音频，进行混音
+                if audio_path and audio_path != "未选择文件":
+                    mix_start = datetime.now()
+                    self.update_log("正在混合音频...")
+                    
+                    # 读取背景音频
+                    background_audio = AudioSegment.from_file(audio_path)
+                    
+                    # 调整背景音量
+                    bg_volume = self.bg_volume_scale.get()
+                    background_audio = background_audio - (30 - bg_volume/2)  # 调整音量
+                    
+                    # 混合音频
+                    final_audio = background_audio.overlay(
+                        dubbed_audio,
+                        position=0,
+                        gain_during_overlay=-1
+                    )
+                else:
+                    final_audio = dubbed_audio
+                
+                # 保存最终音频
+                audio_output = f"{input_name}_s.mp3"
+                final_audio.export(
+                    audio_output,
+                    format="mp3",
+                    parameters=["-q:a", "0", "-ar", "44100", "-b:a", "192k"]
+                )
+                
+                # 如果是视频文件，创建新的视频
+                if is_video:
+                    video_start = datetime.now()
+                    self.update_log("正在生成最终视频...")
+                    
+                    # 使用原始文件名加上_s后缀
+                    output_video = f"{input_name}_s.mp4"
+                    
+                    # 使用ffmpeg合并视频和音频
+                    command = [
+                        'ffmpeg',
+                        '-i', media_path,  # 原视频
+                        '-i', audio_output,  # 混合后的音频
+                        '-c:v', 'copy',  # 复制视频流
+                        '-c:a', 'aac',  # 音频编码
+                        '-strict', 'experimental',
+                        '-map', '0:v:0',  # 使用第一个输入的视频流
+                        '-map', '1:a:0',  # 使用第二个输入的音频流
+                        '-y',  # 覆盖已存在的文件
+                        output_video
+                    ]
+                    
+                    self.run_ffmpeg_command(command)
+                    self.update_log(f"✓ 视频生成完成 (耗时: {format_time_delta(video_start)})")
+                
+                # 显示总耗时
+                self.update_log(f"\n✨ 全部处理完成！总耗时: {format_time_delta(total_start_time)}")
+                self.show_message("完成", f"视频转换完成!\n保存为: {output_video if is_video else audio_output}\n总耗时: {format_time_delta(total_start_time)}")
                 
             except Exception as e:
                 self.show_message("错误", f"转换失败: {str(e)}")
@@ -563,7 +681,7 @@ class SubtitleToSpeech:
                     import shutil
                     shutil.copy2(preview_file, temp_preview)
                     
-                    # ���新线程中放音频
+                    # 新线程中放音频
                     self.preview_btn.config(text="播放中...")
                     threading.Thread(
                         target=self.play_preview,
@@ -586,6 +704,7 @@ class SubtitleToSpeech:
         self.log_queue.put(message)
     
     def run(self):
+        """运行程序"""
         try:
             self.window.mainloop()
         finally:
@@ -632,7 +751,7 @@ class SubtitleToSpeech:
             try:
                 while not self.log_queue.empty():
                     message = self.log_queue.get()
-                    # 如果���进度信息，覆盖最后一行
+                    # 如果进度信息，覆盖最后一行
                     if message.startswith("✓ ") and "/" in message:
                         self.log_text.delete("end-2l", "end-1l")
                     self.log_text.insert(tk.END, message + "\n")
@@ -652,7 +771,7 @@ class SubtitleToSpeech:
             command_str = ' '.join(command)
             self.update_log(f"执行命令: {command_str}")
             
-            # 使用 subprocess.PIPE 重定向输出
+            # 使用 subprocess.PIPE 重定向出
             process = subprocess.Popen(
                 command,
                 stdout=subprocess.PIPE,
@@ -696,7 +815,7 @@ class SubtitleToSpeech:
             # 清理临时文件
             self.cleanup_temp_files()
             # 关闭事件循环
-            if self.loop and not self.loop.is_closed():
+            if hasattr(self, 'loop') and self.loop and not self.loop.is_closed():
                 self.loop.close()
         except Exception as e:
             print(f"清理资源时出错: {str(e)}")
