@@ -1,4 +1,4 @@
-edge-tts
-pydub
-pysubs2
-pygame 
+edge-tts>=6.1.7
+pydub>=0.25.1
+pysubs2>=1.6.1
+pygame>=2.5.2 

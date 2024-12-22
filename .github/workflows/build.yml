@@ -1,9 +1,19 @@
 name: Build and Release
 
 on:
+  workflow_dispatch:
+    inputs:
+      version:
+        description: '版本号 (例如: v1.0.0)'
+        required: true
+        default: 'v1.0.0'
+      prerelease:
+        description: '是否为预发布版本'
+        type: boolean
+        default: false
   push:
     tags:
-      - 'v*'  # 当推送 v 开头的标签时触发
+      - 'v*'
 
 jobs:
   build:
@@ -27,16 +37,44 @@ jobs:
       run: |
         pyinstaller --noconfirm --onefile --windowed --icon=app.ico --add-data "app.ico;." subtitle_to_speech.py
     
+    - name: Get version
+      id: get_version
+      run: |
+        if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
+          echo "version=${{ github.event.inputs.version }}" >> $GITHUB_OUTPUT
+        else
+          echo "version=${GITHUB_REF#refs/tags/}" >> $GITHUB_OUTPUT
+        fi
+      shell: bash
+    
     - name: Create Release
       id: create_release
       uses: actions/create-release@v1
       env:
         GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
       with:
-        tag_name: ${{ github.ref }}
-        release_name: Release ${{ github.ref }}
+        tag_name: ${{ steps.get_version.outputs.version }}
+        release_name: Release ${{ steps.get_version.outputs.version }}
         draft: false
-        prerelease: false
+        prerelease: ${{ github.event.inputs.prerelease || false }}
+        body: |
+          字幕转语音工具 ${{ steps.get_version.outputs.version }}
+          
+          ## 更新内容
+          - 支持 SRT 和 ASS 字幕文件转换为语音
+          - 支持多种中文语音选择
+          - 支持视频配音和背景音乐混合
+          - 实时预览语音效果
+          
+          ## 安装说明
+          1. 下载 subtitle_to_speech.exe
+          2. 确保系统已安装 FFmpeg
+          3. 运行程序即可使用
+          
+          ## 注意事项
+          - 需要网络连接以使用语音服务
+          - 转换大文件可能需要较长时间
+          - 建议先试听语音效果再进行转换
     
     - name: Upload Release Asset
       uses: actions/upload-release-asset@v1
@@ -46,4 +84,4 @@ jobs:
         upload_url: ${{ steps.create_release.outputs.upload_url }}
         asset_path: ./dist/subtitle_to_speech.exe
         asset_name: subtitle_to_speech.exe
-        asset_content_type: application/octet-stream 
+        asset_content_type: application/octet-stream

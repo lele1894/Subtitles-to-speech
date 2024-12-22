@@ -49,13 +49,30 @@ python subtitle_to_speech.py
 
 3. 高级功能
    - 试听：可以预览选择的语音效果
-   - 停止���随时停止语音预览
+   - 停止：随时停止语音预览
    - 实时日志：显示处理进度和状态
 
 4. 输出文件
    - 生成的文件保存在原始文件同目录下
    - 视频文件：原文件名_s.mp4
    - 音频文件：原文件名_s.mp3
+
+## 手动构建
+1. 安装 PyInstaller
+```bash
+pip install pyinstaller
+```
+
+2. 构建可执行文件
+```bash
+# Windows
+pyinstaller --noconfirm --onefile --windowed --icon=app.ico --add-data "app.ico;." subtitle_to_speech.py
+
+# Linux/Mac
+pyinstaller --noconfirm --onefile --windowed --icon=app.ico --add-data "app.ico:." subtitle_to_speech.py
+```
+
+3. 构建完成后，可执行文件位于 `dist` 目录下
 
 ## 注意事项
 - 确保系统已正确安装 FFmpeg
@@ -70,8 +87,8 @@ python subtitle_to_speech.py
 - pygame: 音频播放
 - tkinter: 图形界面
 
-## 开发者
-[你的名字/组织]
+## 下载
+从 [Releases](https://github.com/yourusername/Subtitles-to-speech/releases) 页面下载最新版本。
 
 ## License
 MIT License
@@ -82,6 +99,3 @@ MIT License
 - 支持基本的字幕转语音功能
 - 添加视频配音支持
 - 添加语音预览功能
-
-## 下载
-从 [Releases](https://github.com/yourusername/Subtitles-to-speech/releases) 页面下载最新版本。
