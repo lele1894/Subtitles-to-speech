@@ -16,12 +16,16 @@ from queue import Queue
 import gc
 import platform
 
+# 添加 Windows API 常量
+SW_HIDE = 0
+SW_MINIMIZE = 6
+
 def get_startupinfo():
     """获取适合当前操作系统的 startupinfo"""
     if platform.system() == 'Windows':
         startupinfo = subprocess.STARTUPINFO()
         startupinfo.dwFlags |= subprocess.STARTF_USESHOWWINDOW
-        startupinfo.wShowWindow = subprocess.SW_MINIMIZE  # 最小化显示窗口
+        startupinfo.wShowWindow = SW_MINIMIZE  # 使用自定义的常量
         return startupinfo
     return None
 
@@ -451,7 +455,7 @@ class SubtitleToSpeech:
                 elif media_path != "未选择文件":  # 如果选择了音频文件
                     audio_path = media_path
                 else:
-                    audio_path = None  # 如果没有选择任何媒体文件
+                    audio_path = None  # 如果没有选择任何媒体���件
                 
                 # 获选择的语音
                 voice_full = self.voice_list.get(self.voice_list.curselection())
@@ -484,7 +488,7 @@ class SubtitleToSpeech:
                 for i, line in enumerate(subs):
                     segment_start = datetime.now()
                     
-                    # 只在开始时显示一次
+                    # 只在开始时��示一次
                     if i == 0:
                         self.update_log(f"正在转换: {i+1}/{total}")
                     
@@ -650,7 +654,7 @@ class SubtitleToSpeech:
         # 完成后清理临时文件
         self.cleanup_temp_files()
         
-        # 在处理大量音频片段后主动进行垃��回收
+        # 在处理大量音频片段后主动进行垃圾回收
         gc.collect()
     
     def select_file(self):
@@ -792,7 +796,7 @@ class SubtitleToSpeech:
             print(f"清理临时文件失败: {str(e)}")
     
     def center_window(self, width, height):
-        """使窗口在屏幕中居中"""
+        """使窗口在屏幕���居中"""
         # 获取屏幕宽度和高度
         screen_width = self.window.winfo_screenwidth()
         screen_height = self.window.winfo_screenheight()
@@ -809,7 +813,7 @@ class SubtitleToSpeech:
         timestamp = time.strftime("%H:%M:%S", time.localtime())
         if title == "错误":
             self.update_log(f"[{timestamp}] ❌ {message}")
-        elif title == "完���":
+        elif title == "完成":
             self.update_log(f"[{timestamp}] ✅ {message}")
         else:
             self.update_log(f"[{timestamp}] ℹ️ {message}")
