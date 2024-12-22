@@ -12,6 +12,8 @@ import subprocess
 from pygame import mixer
 import threading
 from datetime import datetime
+from queue import Queue
+import gc
 
 class SubtitleToSpeech:
     def __init__(self):
@@ -26,9 +28,9 @@ class SubtitleToSpeech:
             print("无法加载图标文件")
         
         # 设置窗口大小和位置
-        self.window.geometry("800x800")
-        self.window.minsize(800, 800)
-        self.center_window(800, 800)
+        self.window.geometry("850x850")
+        self.window.minsize(850, 850)
+        self.center_window(850, 850)
         
         # 获取可用的语音列表
         self.voices = self.get_voice_list()
@@ -42,6 +44,13 @@ class SubtitleToSpeech:
         
         # 显示窗口
         self.window.deiconify()
+        
+        # 添加日志队列和更新标志
+        self.log_queue = Queue()
+        self.is_updating_log = False
+        
+        # 启动日志更新循环
+        self.window.after(100, self._process_log_queue)
     
     def get_voice_list(self):
         # 运行异步函数获取声音列表
@@ -153,7 +162,7 @@ class SubtitleToSpeech:
         )
         self.voice_list.pack(side=tk.LEFT, fill=tk.X, expand=True)
         
-        # 添加滚动条
+        # 添加
         scrollbar = tk.Scrollbar(voice_list_frame, orient="vertical")
         scrollbar.pack(side=tk.RIGHT, fill=tk.Y)
         
@@ -270,6 +279,16 @@ class SubtitleToSpeech:
         )
         self.convert_btn.pack(pady=10)
         
+        # 转换按钮下方添加进度条
+        self.progress_var = tk.DoubleVar()
+        self.progress_bar = ttk.Progressbar(
+            left_frame,
+            variable=self.progress_var,
+            maximum=100,
+            mode='determinate'
+        )
+        self.progress_bar.pack(fill=tk.X, pady=(5, 10))
+        
         # 右侧面板 - 只包含日志显示
         right_frame = tk.Frame(panels_frame, bg=bg_color)
         right_frame.pack(side=tk.LEFT, fill=tk.BOTH, expand=True)  # expand=True 使其占用剩余空间
@@ -333,14 +352,35 @@ class SubtitleToSpeech:
                 
             except Exception as e:
                 if attempt < max_retries - 1:  # 如果还有重试机会
-                    print(f"语音生成失败{retry_delay}秒后重试: {str(e)}")
+                    print(f"语音生成失败{retry_delay}���后重试: {str(e)}")
                     await asyncio.sleep(retry_delay)
                     retry_delay *= 2  # 增加重试延迟
                 else:  # 最后一次尝试失败
                     raise  # 重新抛出异常
     
+    def _start_conversion_thread(self):
+        """在新线程中启动转换过程"""
+        self.convert_btn.config(state='disabled')
+        
+        # 创建并启动转换线程
+        convert_thread = threading.Thread(
+            target=lambda: asyncio.run(self.convert_subtitle()),
+            daemon=True
+        )
+        convert_thread.start()
+        
+        # 定期检查线程状态并恢复按钮
+        def check_thread():
+            if convert_thread.is_alive():
+                self.window.after(100, check_thread)
+            else:
+                self.convert_btn.config(state='normal')
+        
+        self.window.after(100, check_thread)
+    
     def start_conversion(self):
-        asyncio.run(self.convert_subtitle())
+        """启动转换过程"""
+        self._start_conversion_thread()
     
     async def convert_subtitle(self):
         total_start_time = datetime.now()
@@ -365,7 +405,7 @@ class SubtitleToSpeech:
                     self.show_message("错误", f"读取字幕文件失败: {str(e)}")
                     return
                 
-                # 如果选择了视频，提取音频
+                # 果选择了视频，提取音频
                 if is_video:
                     extract_start = datetime.now()
                     self.update_log("正在提取视频音频...")
@@ -396,7 +436,7 @@ class SubtitleToSpeech:
                         # 提取成功，更新音频路径
                         audio_path = temp_audio
                     else:
-                        raise Exception(f"提取音频失败: {stderr.decode()}")
+                        raise Exception(f"提取���频失败: {stderr.decode()}")
                     
                     self.update_log(f"✓ 音频提取完成 (耗时: {format_time_delta(extract_start)})")
                 else:
@@ -423,9 +463,19 @@ class SubtitleToSpeech:
                 
                 audio_segments = []
                 
+                # 重置进度条
+                self.progress_var.set(0)
+                
+                # 批量更新进度
+                progress_count = 0
+                update_interval = max(1, total // 20)  # 每5%更新一次
+                
                 for i, line in enumerate(subs):
                     segment_start = datetime.now()
-                    self.update_log(f"正在转换: {i+1}/{total}")
+                    
+                    # 只在开始时显示一次
+                    if i == 0:
+                        self.update_log(f"正在转换: {i+1}/{total}")
                     
                     text = line.text.strip()
                     if not text:
@@ -437,7 +487,7 @@ class SubtitleToSpeech:
                         try:
                             await self.convert_text_to_speech(text, temp_file, voice, rate, volume)
                         except Exception as e:
-                            self.update_log(f"警告: 片段 {i+1} 转换失败，正在重试...")
+                            self.update_log(f"警告: 段 {i+1} 转换失败，正在重试...")
                             continue
                         
                         # 等待文件生成完成
@@ -466,10 +516,20 @@ class SubtitleToSpeech:
                         })
                         
                     except Exception as e:
-                        print(f"警告: 处理音频片段 {i+1} 时出错: {str(e)}")
+                        self.update_log(f"⚠️ 片段 {i+1} 失败: {str(e)}")
                         continue
                     
-                    self.update_log(f"✓ 片段 {i+1} 转换完成 (耗时: {format_time_delta(segment_start)})")
+                    progress_count += 1
+                    if progress_count >= update_interval:
+                        self.update_log(f"已完成: {i+1}/{total}")
+                        progress_count = 0
+                    
+                    # 只显示完成时间，不重复显示正在转换
+                    self.update_log(f"✓ 片段 {i+1} (耗时: {format_time_delta(segment_start)})")
+                    
+                    # 更新进度条
+                    progress = (i + 1) / total * 100
+                    self.progress_var.set(progress)
                 
                 self.update_log(f"✓ 字幕转换完成 (耗时: {format_time_delta(convert_start)})")
                 
@@ -486,7 +546,8 @@ class SubtitleToSpeech:
                     for segment in audio_segments:
                         dubbed_audio = dubbed_audio.overlay(
                             segment['audio'], 
-                            position=segment['start']
+                            position=segment['start'],
+                            gain_during_overlay=-1  # 轻微降低重叠部分的音量
                         )
                     
                     # 创建输出目录
@@ -500,7 +561,11 @@ class SubtitleToSpeech:
                         self.update_log("正在混合音频...")
                         
                         # 读取背景音频
-                        background_audio = AudioSegment.from_file(audio_path)
+                        background_audio = AudioSegment.from_file(
+                            audio_path,
+                            format="mp3",
+                            parameters=["-bufsize", "10M"]
+                        )
                         
                         # 调整背景音量
                         bg_volume = self.bg_volume_scale.get() / 100.0
@@ -520,7 +585,7 @@ class SubtitleToSpeech:
                         final_audio = dubbed_audio
                     
                     # 生成输出件名（原始文件所在目录）
-                    input_name = os.path.splitext(media_path)[0]  # 获取不带扩展名的原始文件名
+                    input_name = os.path.splitext(media_path)[0]  # 获取带扩展名的原始文件名
                     
                     # 保存音频文件
                     audio_output = f"{input_name}_s.mp3"
@@ -582,6 +647,9 @@ class SubtitleToSpeech:
         
         # 完成后清理临时文件
         self.cleanup_temp_files()
+        
+        # 在处理大量音频片段后主动进行垃圾回收
+        gc.collect()
     
     def select_file(self):
         file_path = filedialog.askopenfilename(
@@ -645,7 +713,7 @@ class SubtitleToSpeech:
         voice_full = self.voice_list.get(selection[0])
         voice = voice_full.split()[0]
         
-        # 禁用试听按钮，启用停��按钮
+        # 禁试听按钮，启用停止按钮
         self.preview_btn.config(state='disabled')
         self.stop_btn.config(state='normal')
         self.preview_btn.config(text="生成中...")
@@ -697,13 +765,19 @@ class SubtitleToSpeech:
             self.preview_btn.config(text="试听语音")
     
     def update_log(self, message):
-        """更新日志显示"""
-        self.log_text.insert(tk.END, message + "\n")
-        self.log_text.see(tk.END)
-        self.window.update()
+        """将日志消息添加到队列"""
+        self.log_queue.put(message)
     
     def run(self):
-        self.window.mainloop()
+        try:
+            self.window.mainloop()
+        finally:
+            # 清理资源
+            self.cleanup_temp_files()
+            # 确保所有线程都已终止
+            for thread in threading.enumerate():
+                if thread != threading.current_thread():
+                    thread.join(timeout=1.0)
     
     def cleanup_temp_files(self):
         """清理临时文件和文件夹"""
@@ -738,6 +812,19 @@ class SubtitleToSpeech:
         else:
             self.update_log(f"[{timestamp}] ℹ️ {message}")
         self.window.update()
+    
+    def _process_log_queue(self):
+        """处理日志队列"""
+        if not self.is_updating_log:
+            self.is_updating_log = True
+            while not self.log_queue.empty():
+                message = self.log_queue.get()
+                self.log_text.insert(tk.END, message + "\n")
+                self.log_text.see(tk.END)
+            self.is_updating_log = False
+        
+        # 继续循环
+        self.window.after(100, self._process_log_queue)
 
 def format_time_delta(start_time):
     """计算并格式化耗时"""
