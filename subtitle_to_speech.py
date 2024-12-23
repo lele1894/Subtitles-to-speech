@@ -14,6 +14,13 @@ import threading
 from datetime import datetime
 from queue import Queue
 import gc
+import warnings
+
+if sys.platform.startswith('win'):
+    # 禁用 ProactorEventLoop 的警告
+    warnings.filterwarnings('ignore', message='There is no current event loop')
+    # 使用 WindowsSelectorEventLoopPolicy
+    asyncio.set_event_loop_policy(asyncio.WindowsSelectorEventLoopPolicy())
 
 class SubtitleToSpeech:
     def __init__(self):
@@ -32,7 +39,7 @@ class SubtitleToSpeech:
         self.window.minsize(850, 850)
         self.center_window(850, 850)
         
-        # 获取可用的语音列表
+        # ���取可用的语音列表
         self.voices = self.get_voice_list()
         
         # 初始化音频播放器
@@ -51,6 +58,9 @@ class SubtitleToSpeech:
         
         # 启动日志更新循环
         self.window.after(100, self._process_log_queue)
+        
+        # 添加一个变量来存储字幕文件路径
+        self.subtitle_path = None
     
     def get_voice_list(self):
         # 运行异步函数获取声音列表
@@ -261,7 +271,7 @@ class SubtitleToSpeech:
             bg=frame_bg,
             highlightthickness=0
         )
-        self.bg_volume_scale.set(30)
+        self.bg_volume_scale.set(5)
         self.bg_volume_scale.pack(fill=tk.X, padx=10, pady=5)
         
         # 开始转换按钮
@@ -362,9 +372,36 @@ class SubtitleToSpeech:
         """在新线程中启动转换过程"""
         self.convert_btn.config(state='disabled')
         
+        def run_async():
+            try:
+                # 创建新的事件循环
+                loop = asyncio.new_event_loop()
+                asyncio.set_event_loop(loop)
+                
+                # 运行转换任务
+                loop.run_until_complete(self.convert_subtitle())
+            except Exception as e:
+                self.update_log(f"❌ 转换失败: {str(e)}")
+            finally:
+                try:
+                    # 关闭所有未完成的任务
+                    pending = asyncio.all_tasks(loop)
+                    for task in pending:
+                        task.cancel()
+                    
+                    # 运行直到所有任务完成
+                    if pending:
+                        loop.run_until_complete(asyncio.gather(*pending, return_exceptions=True))
+                    
+                    # 关闭事件循环
+                    loop.run_until_complete(loop.shutdown_asyncgens())
+                    loop.close()
+                except Exception:
+                    pass
+        
         # 创建并启动转换线程
         convert_thread = threading.Thread(
-            target=lambda: asyncio.run(self.convert_subtitle()),
+            target=run_async,
             daemon=True
         )
         convert_thread.start()
@@ -640,6 +677,7 @@ class SubtitleToSpeech:
             ]
         )
         if file_path:
+            self.subtitle_path = file_path  # 保存文件路径
             self.file_label.config(text=file_path)
     
     def select_media(self):
@@ -755,28 +793,20 @@ class SubtitleToSpeech:
         finally:
             # 清理资源
             self.cleanup_temp_files()
+            
             # 确保所有线程都已终止
             for thread in threading.enumerate():
                 if thread != threading.current_thread():
                     thread.join(timeout=1.0)
-            
-            # 关闭事件循环
-            try:
-                loop = asyncio.get_event_loop()
-                if loop.is_running():
-                    loop.stop()
-                if not loop.is_closed():
-                    loop.close()
-            except Exception:
-                pass
     
     def cleanup_temp_files(self):
         """清理临时文件和文件夹"""
         try:
-            temp_dir = os.path.join(os.path.dirname(self.file_label.cget("text")), "speech_output")
-            if os.path.exists(temp_dir):
-                import shutil
-                shutil.rmtree(temp_dir)
+            if self.subtitle_path:  # 使用保存的路径
+                temp_dir = os.path.join(os.path.dirname(self.subtitle_path), "speech_output")
+                if os.path.exists(temp_dir):
+                    import shutil
+                    shutil.rmtree(temp_dir)
         except Exception as e:
             print(f"清理临时文件失败: {str(e)}")
     
