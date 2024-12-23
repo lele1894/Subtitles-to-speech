@@ -34,9 +34,55 @@ jobs:
         pip install -r requirements.txt
         pip install pyinstaller
     
+    - name: 创建 spec 文件
+      run: |
+        echo "# -*- mode: python ; coding: utf-8 -*-
+
+        block_cipher = None
+
+        a = Analysis(
+            ['subtitle_to_speech.py'],
+            pathex=[],
+            binaries=[],
+            datas=[('app.ico', '.')],
+            hiddenimports=[],
+            hookspath=[],
+            hooksconfig={},
+            runtime_hooks=[],
+            excludes=[],
+            win_no_prefer_redirects=False,
+            win_private_assemblies=False,
+            cipher=block_cipher,
+            noarchive=False,
+        )
+
+        pyz = PYZ(a.pure, a.zipped_data, cipher=block_cipher)
+
+        exe = EXE(
+            pyz,
+            a.scripts,
+            a.binaries,
+            a.zipfiles,
+            a.datas,
+            [],
+            name='subtitle_to_speech',
+            debug=False,
+            bootloader_ignore_signals=False,
+            strip=False,
+            upx=True,
+            upx_exclude=[],
+            runtime_tmpdir=None,
+            console=False,
+            disable_windowed_traceback=False,
+            target_arch=None,
+            codesign_identity=None,
+            entitlements_file=None,
+            icon='app.ico'
+        )" > subtitle_to_speech.spec
+    
     - name: 构建可执行文件
       run: |
-        pyinstaller --noconfirm --onefile --windowed --icon=app.ico --add-data "app.ico;." subtitle_to_speech.py
+        pyinstaller subtitle_to_speech.spec
     
     - name: 获取版本号
       id: get_version
