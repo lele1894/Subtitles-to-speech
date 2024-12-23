@@ -30,16 +30,19 @@ class SubtitleToSpeech:
         
         # 设置图标
         try:
-            self.window.iconbitmap("app.ico")
-        except:
-            print("无法加载图标文件")
+            if os.path.exists("app.ico"):
+                self.window.iconbitmap("app.ico")
+            else:
+                print("图标文件不存在: app.ico")
+        except Exception as e:
+            print(f"加载图标失败: {str(e)}")
         
         # 设置窗口大小和位置
         self.window.geometry("850x850")
         self.window.minsize(850, 850)
         self.center_window(850, 850)
         
-        # ���取可用的语音列表
+        # 取可用的语音列表
         self.voices = self.get_voice_list()
         
         # 初始化音频播放器
@@ -160,7 +163,7 @@ class SubtitleToSpeech:
         )
         voice_frame.pack(fill=tk.X, pady=(0, 10), ipady=5)
         
-        # 语音选择列表 - 增加高度
+        # ��音选择列表 - 增加高度
         voice_list_frame = tk.Frame(voice_frame, bg=frame_bg)
         voice_list_frame.pack(fill=tk.X, padx=10, pady=5)
         
