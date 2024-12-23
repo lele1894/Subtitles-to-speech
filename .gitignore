@@ -20,10 +20,13 @@ wheels/
 .installed.cfg
 *.egg
 
+# PyInstaller
+dist/
+build/
+
 # Virtual Environment
 venv/
 ENV/
-env/
 
 # IDE
 .idea/
@@ -31,11 +34,19 @@ env/
 *.swp
 *.swo
 
-# Project specific
-*.mp3
-*.mp4
-*.wav
-*.srt
-*.ass
-*.log
-temp/
+# Temp files
+*.tmp
+*.bak
+*.swp
+*~
+
+# Windows
+Thumbs.db
+ehthumbs.db
+Desktop.ini
+$RECYCLE.BIN/
+
+# macOS
+.DS_Store
+.AppleDouble
+.LSOverride 
